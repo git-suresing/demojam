@@ -1,0 +1,31 @@
+apiVersion: v1alpha1
+metadata:
+  name: {{ data.Cluster_Name }}
+rendezvousIP: {{ data.Hosts[0].Machine_ipv4 }}
+hosts:
+{% for host in data.Hosts %}
+  - hostname: {{ host.Host_Name }}
+    interfaces:
+      - name: {{ data['Single-Interface-name'] }}
+        macAddress: {{ host['Singh-Interface-mac'] }}
+    networkConfig:
+      interfaces:
+        - name: {{ data['Single-Interface-name'] }}
+          state: up
+          ipv4:
+            address:
+            - ip: {{ host.Machine_ipv4 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv4 }}
+            enabled: true
+            dhcp: false
+      dns-resolver:
+        config:
+          server:
+            - {{ data.DNS_IP }}
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: {{ data.Machine_Network_Gateway_ipv4 }}
+            table-id: 254
+            next-hop-interface: {{ data['Single-Interface-name'] }}
+{% endfor %}

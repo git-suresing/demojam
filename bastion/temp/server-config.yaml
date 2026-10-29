@@ -1,0 +1,215 @@
+---
+- name: Configure Server To Create Virtual environment for OCP Deployment
+  hosts: all
+  become: yes
+  tasks:
+    - name: yum install step 1
+      ansible.builtin.shell: 'dnf -y copr enable karmab/kcli'
+
+    - name: yum install step 2
+      ansible.builtin.shell: 'dnf -y install rsync tmux podman httpd-tools runc wget nmstate containernetworking-plugins bind-utils bash-completion tree python3.9 cockpit cockpit-machines dnsmasq libvirt libvirt-daemon-driver-qemu qemu-kvm kcli bash-completion vim jq tar git ipcalc python3-pip haproxy'
+
+    - name: Enable cockpit socket 1
+      ansible.builtin.shell: 'systemctl enable --now cockpit.socket'
+
+    - name: disable firewall step 3
+      ansible.builtin.shell: 'iptables -F'
+
+    - name: Install cherrypy
+      ansible.builtin.shell: 'pip3 install cherrypy'
+
+    - name: Install setuptools
+      ansible.builtin.shell: 'pip install -U pip setuptools'
+
+    - name: Enable KShushy step 4
+      ansible.builtin.shell: 'kcli create sushy-service --port 9000'
+
+    - name: Enable KShushy step 5
+      ansible.builtin.shell: 'systemctl enable ksushy --now'
+
+    - name: Enable KShushy step 6
+      ansible.builtin.shell: 'sleep 5'
+
+    - name: Enable KShushy step 7
+      ansible.builtin.shell: 'systemctl is-active ksushy'
+
+    - name: kvm 1
+      ansible.builtin.shell: 'usermod -aG qemu,libvirt $(id -un)'
+
+    - name: kvm 3
+      ansible.builtin.shell: 'systemctl enable libvirtd --now'
+
+    - name: kvm 4
+      ansible.builtin.shell: 'sleep 10'
+
+    - name: kvm 5
+      ansible.builtin.shell: 'systemctl is-active libvirtd # should show active'
+
+    - name: kvm 6
+      ansible.builtin.shell: 'systemctl restart libvirtd'
+
+    - name: network 2
+      ansible.builtin.shell: 'kcli create pool -p /var/lib/libvirt/images default'
+
+    - name: id_ras key for virtual machine
+      ansible.builtin.copy:
+        dest: /root/.ssh/id_rsa
+        content: |
+          ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB2mkCmJuqODDHH5NtrieHQR8PzSMHQerzpei/kMV8Ky
+        mode: '0600'
+
+    - name: pool secret step 1
+      ansible.builtin.shell: 'mkdir -p /root/.docker'
+
+    - name: pool secret step 2
+      ansible.builtin.copy:
+        dest: /root/.docker/config.json
+        content: |
+          {"auths":{"cloud.openshift.com":{"auth":"b3BlbnNoaWZ0LXJlbGVhc2UtZGV2K29jbV9hY2Nlc3NfMjU5YmQ4OGIyMjRkNGJjMjgzNjY5ZjVlZjBiYmY1OGE6TkpKMDAySDNJWVY5N1c5S1haMjFXNUJZUFoyOVQ1U0FYMUJFU0pSVkYxRVRPNlc1UlFWTk5NUTE3U0o2VEhCNQ=="},"quay.io":{"auth":"b3BlbnNoaWZ0LXJlbGVhc2UtZGV2K29jbV9hY2Nlc3NfMjU5YmQ4OGIyMjRkNGJjMjgzNjY5ZjVlZjBiYmY1OGE6TkpKMDAySDNJWVY5N1c5S1haMjFXNUJZUFoyOVQ1U0FYMUJFU0pSVkYxRVRPNlc1UlFWTk5NUTE3U0o2VEhCNQ=="},"quay.ocplab.surendra.redhat.com:8443":{"auth":"YWRtaW46cjNkaDR0MSE="},"registry.connect.redhat.com":{"auth":"fHVoYy1wb29sLTc0OWU0NTdlLTJhZTEtNGI4Ni04NzcxLTNlNGIzMWZjMGRhMTpleUpoYkdjaU9pSlNVelV4TWlKOS5leUp6ZFdJaU9pSTFORGN4TkRSa05tSTNaak0wTXpJMU9HTTJZelJpTlRBd01XRTJNekZoT0NKOS5SU0hINm8tUFVxaWFaY0Uya2VwTlh2bHUwZlV5UHZnU3ZmV29za0NJTWE1Z19waWJ1bElhNVV2ejktcnhuUkxoLUZzd0RTcG5oT3dxckc0X0h0dUFiSFl0UG5VRVEwTGNBYmJUQTFPSjQ5aGtTVUJaSXpZQU8zTlBPdkV0SGJfbDlLQXRYa1oza0xYbVNranlfdWxjNnVIdHc0VS1zejdhU2dPTnYxMlJRZWRsb0lWdTl4TlZzWFc3YnhYSzEwYVFxWjQ4SXA4Si1oWWVUYzFFSWxFR0M0cUVpZ2xJSzJYTUJmSTJBM1EzeWNPbEhZY1NTSHBDcXpJbnFsX0hDQ1F2Y0l6UG81SlVfTHlJYTl4a3BHNlI3YnJqRkxqUzJXa3dyUlBBeEV5bG9fcjNDT3M1RnpwOFVWQUJqSVl3MmJhOEV0bEkxcDBkOHVoYkZNMTdqTlhHNUtJX2xPSmM5bG83V1V2RE5CaVZGZlhKVFVSeTBhd3FxdDZSTXE3YzNzZ3NmSy1FSFhzcFF4YkRtNHRGRjA2czdkUGVSbjYzczRzWW9yd0NhdDJ0Y09URGkwaF9ERzhNTENJTEJHMldPcEp3U3Q4N1haQkI4TDJzYW5JSGppSzgwNGpBbU9vYVRYdk9jY21FLXVSTnlRT0lONEFQQzNOZGFPY1ZlRTdfRjF4S3hURTJhT0JXbGJSTmEzYmRlSGwxNDF0MnY2UnEwdjBfUmVXLTg2NVlNNnBzcW12UmFNMHQxNFBsbkZfVG9iQXA2RzRwcjZJNVBjemlmZlFKYk1HMG9YZ1JCdTJ4c3BUYU9zN1BWeVliQmQtTFl5WE9vR2dpNGFwU1RRS0QwNmx0WWZrZE5pMktYWHJfRGtIZkw4aTg1WVAxVjAxWGxiMUNTY1U4NW5zUEJOcw=="},"registry.redhat.io":{"auth":"fHVoYy1wb29sLTc0OWU0NTdlLTJhZTEtNGI4Ni04NzcxLTNlNGIzMWZjMGRhMTpleUpoYkdjaU9pSlNVelV4TWlKOS5leUp6ZFdJaU9pSTFORGN4TkRSa05tSTNaak0wTXpJMU9HTTJZelJpTlRBd01XRTJNekZoT0NKOS5SU0hINm8tUFVxaWFaY0Uya2VwTlh2bHUwZlV5UHZnU3ZmV29za0NJTWE1Z19waWJ1bElhNVV2ejktcnhuUkxoLUZzd0RTcG5oT3dxckc0X0h0dUFiSFl0UG5VRVEwTGNBYmJUQTFPSjQ5aGtTVUJaSXpZQU8zTlBPdkV0SGJfbDlLQXRYa1oza0xYbVNranlfdWxjNnVIdHc0VS1zejdhU2dPTnYxMlJRZWRsb0lWdTl4TlZzWFc3YnhYSzEwYVFxWjQ4SXA4Si1oWWVUYzFFSWxFR0M0cUVpZ2xJSzJYTUJmSTJBM1EzeWNPbEhZY1NTSHBDcXpJbnFsX0hDQ1F2Y0l6UG81SlVfTHlJYTl4a3BHNlI3YnJqRkxqUzJXa3dyUlBBeEV5bG9fcjNDT3M1RnpwOFVWQUJqSVl3MmJhOEV0bEkxcDBkOHVoYkZNMTdqTlhHNUtJX2xPSmM5bG83V1V2RE5CaVZGZlhKVFVSeTBhd3FxdDZSTXE3YzNzZ3NmSy1FSFhzcFF4YkRtNHRGRjA2czdkUGVSbjYzczRzWW9yd0NhdDJ0Y09URGkwaF9ERzhNTENJTEJHMldPcEp3U3Q4N1haQkI4TDJzYW5JSGppSzgwNGpBbU9vYVRYdk9jY21FLXVSTnlRT0lONEFQQzNOZGFPY1ZlRTdfRjF4S3hURTJhT0JXbGJSTmEzYmRlSGwxNDF0MnY2UnEwdjBfUmVXLTg2NVlNNnBzcW12UmFNMHQxNFBsbkZfVG9iQXA2RzRwcjZJNVBjemlmZlFKYk1HMG9YZ1JCdTJ4c3BUYU9zN1BWeVliQmQtTFl5WE9vR2dpNGFwU1RRS0QwNmx0WWZrZE5pMktYWHJfRGtIZkw4aTg1WVAxVjAxWGxiMUNTY1U4NW5zUEJOcw=="}}}
+        mode: '0644'
+
+    - name: Download podman webcache systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-webcache.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Podman container - webcache
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/root
+          TimeoutStartSec=300
+          ExecStartPre=-/usr/bin/podman rm -f webcache
+          ExecStart=/usr/bin/podman run --name webcache --net host -v /opt/webcache/data:/usr/local/apache2/htdocs:z quay.io/alosadag/httpd:p8080 
+          ExecStop=-/usr/bin/podman rm -f webcache
+          Restart=always
+          RestartSec=30s
+          StartLimitInterval=60s
+          StartLimitBurst=99
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create webcache data directory
+      ansible.builtin.file:
+        path: /opt/webcache/data
+        state: directory
+        mode: '0755'
+
+    - name: Reload systemd daemon after adding webcache service
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start podman-webcache service
+      ansible.builtin.systemd:
+        name: podman-webcache
+        enabled: true
+        state: started
+
+    - name: Create baremetal network
+      ansible.builtin.command: >
+        kcli create network -c 10.64.40.0/24
+        -P dhcp=false
+        --domain demojam.redhat.com
+        baremetal
+
+    - name: Create ctlplane network
+      ansible.builtin.command: >
+        kcli create network -c 172.17.0.0/24
+        -P dhcp=false
+        --domain demojam.redhat.com
+        ctlplane
+
+    - name: Create provisioning network
+      ansible.builtin.command: >
+        kcli create network -c 10.64.32.0/24
+        -P dhcp=false
+        --domain demojam.redhat.com
+        provisioning
+
+    - name: dns config create dnsmasq.conf file
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/dnsmasq.conf
+        content: |
+          [main]
+          dns=dnsmasq
+          [connection]
+          ipv4.dns-priority=200
+          ipv6.dns-priority=200
+        mode: '0644'
+
+    - name: dns config create main.conf file
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/dnsmasq.d/main.conf
+        content: |
+          host-record=quay.redhatone.demojam.redhat.com,10.64.40.1
+          host-record=api-int.redhatone.demojam.redhat.com,10.64.40.10
+          host-record=api.redhatone.demojam.redhat.com,10.64.40.10
+
+          host-record=master-0.redhatone.demojam.redhat.com,10.64.40.40
+
+          host-record=master-1.redhatone.demojam.redhat.com,10.64.40.41
+
+          host-record=master-2.redhatone.demojam.redhat.com,10.64.40.42
+
+          address=/apps.redhatone.demojam.redhat.com/10.64.40.11
+        mode: '0644'
+
+    - name: dns config reload NetworkManager.service
+      ansible.builtin.shell: 'systemctl reload NetworkManager.service'
+
+    - name: dns config restart NetworkManager.service
+      ansible.builtin.shell: 'systemctl restart NetworkManager.service'
+
+    - name: dns config acive NetworkManager
+      ansible.builtin.shell: 'systemctl is-active NetworkManager'
+
+
+    - name: Create master-0 VM
+      ansible.builtin.command: >
+        kcli create vm
+        -P start=False
+        -P uefi_legacy=true
+        -P plan=ocp
+        -P memory=20000
+        -P numcpus=16
+        -P disks=[200,700]
+        -P nets='[{"name": "baremetal", "mac": "aa:aa:aa:aa:01:01"},
+                  {"name": "provisioning", "mac": "aa:aa:aa:aa:02:01"},
+                  {"name": "ctlplane", "mac": "aa:aa:aa:aa:03:01"}]'
+        -P uuid=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0101
+        master-0
+
+    - name: Create master-1 VM
+      ansible.builtin.command: >
+        kcli create vm
+        -P start=False
+        -P uefi_legacy=true
+        -P plan=ocp
+        -P memory=20000
+        -P numcpus=16
+        -P disks=[200,700]
+        -P nets='[{"name": "baremetal", "mac": "aa:aa:aa:aa:01:02"},
+                  {"name": "provisioning", "mac": "aa:aa:aa:aa:02:02"},
+                  {"name": "ctlplane", "mac": "aa:aa:aa:aa:03:02"}]'
+        -P uuid=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0102
+        master-1
+
+    - name: Create master-2 VM
+      ansible.builtin.command: >
+        kcli create vm
+        -P start=False
+        -P uefi_legacy=true
+        -P plan=ocp
+        -P memory=20000
+        -P numcpus=16
+        -P disks=[200,700]
+        -P nets='[{"name": "baremetal", "mac": "aa:aa:aa:aa:01:03"},
+                  {"name": "provisioning", "mac": "aa:aa:aa:aa:02:03"},
+                  {"name": "ctlplane", "mac": "aa:aa:aa:aa:03:03"}]'
+        -P uuid=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0103
+        master-2

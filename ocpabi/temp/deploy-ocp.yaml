@@ -1,0 +1,123 @@
+---
+- name: Deploying OCP Cluster using ABI method
+  hosts: all
+  become: true
+  vars:
+    gateway_ip: "10.64.40.1"
+    hosts_list: "[{'Host_Name': 'master-0.redhatone.demojam.redhat.com', 'Role': 'master', 'Machine_ipv4': '10.64.40.40', 'Machine_ipv6': '', 'ILO_IP': 'master-0', 'root_Device_Hints': '', 'MCP_Name': '', 'Singh-Interface-mac': 'aa:aa:aa:aa:01:01', 'Bond-Interface1-mac': '', 'Bond-Interface2-mac': ''}, {'Host_Name': 'master-1.redhatone.demojam.redhat.com', 'Role': 'master', 'Machine_ipv4': '10.64.40.41', 'Machine_ipv6': '', 'ILO_IP': 'master-1', 'root_Device_Hints': '', 'MCP_Name': '', 'Singh-Interface-mac': 'aa:aa:aa:aa:01:02', 'Bond-Interface1-mac': '', 'Bond-Interface2-mac': ''}, {'Host_Name': 'master-2.redhatone.demojam.redhat.com', 'Role': 'master', 'Machine_ipv4': '10.64.40.42', 'Machine_ipv6': '', 'ILO_IP': 'master-2', 'root_Device_Hints': '', 'MCP_Name': '', 'Singh-Interface-mac': 'aa:aa:aa:aa:01:03', 'Bond-Interface1-mac': '', 'Bond-Interface2-mac': ''}]"
+
+  tasks:
+    - name: Create abi directory in home
+      ansible.builtin.file:
+        path: "/root/abi"
+        state: directory
+        mode: '0755'
+
+    - name: Copy install-config from source to bastion node
+      ansible.builtin.copy:
+        src: "install-config.yaml"
+        dest: "/root/abi/install-config.yaml"
+        mode: '0644'
+
+    - name: Copy agent-config from source to bastion node
+      ansible.builtin.copy:
+        src: "agent-config.yaml"
+        dest: "/root/abi/agent-config.yaml"
+        mode: '0644'
+
+    - name: Run openshift-install to create agent image
+      ansible.builtin.command:
+        cmd: openshift-install agent create image --dir=/root/abi/ --log-level=debug
+
+    - name: Copy generated ISO to webcache directory
+      ansible.builtin.copy:
+        src: "/root/abi/agent.x86_64.iso"
+        dest: "/opt/webcache/data/agent.x86_64.iso"
+        mode: '0644'
+        remote_src: true
+
+    - name: Insert Virtual Media on master-0
+      ansible.builtin.uri:
+        url: "https://10.64.40.1:9000/redfish/v1/Managers/local/master-0/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia"
+        method: POST
+        body_format: json
+        body:
+          Image: "http://10.64.40.1:8080/agent.x86_64.iso"
+          Inserted: true
+        headers:
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: [200, 202, 204]
+      register: result_master_0
+
+    - name: Show result for master-0
+      ansible.builtin.debug:
+        var: result_master_0
+    - name: Insert Virtual Media on master-1
+      ansible.builtin.uri:
+        url: "https://10.64.40.1:9000/redfish/v1/Managers/local/master-1/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia"
+        method: POST
+        body_format: json
+        body:
+          Image: "http://10.64.40.1:8080/agent.x86_64.iso"
+          Inserted: true
+        headers:
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: [200, 202, 204]
+      register: result_master_1
+
+    - name: Show result for master-1
+      ansible.builtin.debug:
+        var: result_master_1
+    - name: Insert Virtual Media on master-2
+      ansible.builtin.uri:
+        url: "https://10.64.40.1:9000/redfish/v1/Managers/local/master-2/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia"
+        method: POST
+        body_format: json
+        body:
+          Image: "http://10.64.40.1:8080/agent.x86_64.iso"
+          Inserted: true
+        headers:
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: [200, 202, 204]
+      register: result_master_2
+
+    - name: Show result for master-2
+      ansible.builtin.debug:
+        var: result_master_2
+
+    - name: Start hub VM
+      ansible.builtin.command:
+        cmd: kcli start plan ocp
+
+    - name: Create /root/.kube directory
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy kubeconfig file to /root/.kube/config
+      ansible.builtin.copy:
+        src: /root/abi/auth/kubeconfig
+        dest: /root/.kube/config
+        remote_src: true
+        mode: '0600'
+
+    - name: Generate oc bash completion script
+      ansible.builtin.command:
+        cmd: oc completion bash
+      register: oc_completion
+      failed_when: false
+      changed_when: false
+
+
+    - name: Save oc bash completion to file
+      ansible.builtin.copy:
+        dest: /etc/bash_completion.d/oc
+        content: "{{ oc_completion.stdout | default('') }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: oc_completion is defined and oc_completion.stdout is defined and oc_completion.stdout != ''

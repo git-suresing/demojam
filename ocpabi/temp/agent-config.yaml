@@ -1,0 +1,77 @@
+apiVersion: v1alpha1
+metadata:
+  name: redhatone
+rendezvousIP: 10.64.40.40
+hosts:
+  - hostname: master-0.redhatone.demojam.redhat.com
+    interfaces:
+      - name: eth0
+        macAddress: aa:aa:aa:aa:01:01
+    networkConfig:
+      interfaces:
+        - name: eth0
+          state: up
+          ipv4:
+            address:
+            - ip: 10.64.40.40
+              prefix-length: 24
+            enabled: true
+            dhcp: false
+      dns-resolver:
+        config:
+          server:
+            - 10.64.40.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 10.64.40.1
+            table-id: 254
+            next-hop-interface: eth0
+  - hostname: master-1.redhatone.demojam.redhat.com
+    interfaces:
+      - name: eth0
+        macAddress: aa:aa:aa:aa:01:02
+    networkConfig:
+      interfaces:
+        - name: eth0
+          state: up
+          ipv4:
+            address:
+            - ip: 10.64.40.41
+              prefix-length: 24
+            enabled: true
+            dhcp: false
+      dns-resolver:
+        config:
+          server:
+            - 10.64.40.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 10.64.40.1
+            table-id: 254
+            next-hop-interface: eth0
+  - hostname: master-2.redhatone.demojam.redhat.com
+    interfaces:
+      - name: eth0
+        macAddress: aa:aa:aa:aa:01:03
+    networkConfig:
+      interfaces:
+        - name: eth0
+          state: up
+          ipv4:
+            address:
+            - ip: 10.64.40.42
+              prefix-length: 24
+            enabled: true
+            dhcp: false
+      dns-resolver:
+        config:
+          server:
+            - 10.64.40.1
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: 10.64.40.1
+            table-id: 254
+            next-hop-interface: eth0

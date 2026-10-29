@@ -1,0 +1,122 @@
+apiVersion: v1
+baseDomain: {{ Base_Domain }}
+metadata:
+  name: {{ Cluster_Name }}
+networking:
+  clusterNetwork:
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+  - cidr: {{ Cluster_Network_ipv4 }}
+    hostPrefix: 23
+{% endif %}
+{% if IP_Subnet_Type in ['ipv6', 'dual'] %}
+  - cidr: {{ Cluster_Network_ipv6 }}
+    hostPrefix: 64
+{% endif %}
+  machineNetwork:
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+  - cidr: {{ Machine_Network_ipv4 }}/{{ Machine_Network_Subnet_ipv4 }}
+{% endif %}
+{% if IP_Subnet_Type in ['ipv6', 'dual'] %}
+  - cidr: {{ Machine_Network_ipv6 }}/{{ Machine_Network_Subnet_ipv6 }}
+{% endif %}
+  networkType: OVNKubernetes
+  serviceNetwork:
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+  - {{ Service_Network_ipv4 }}
+{% endif %}
+{% if IP_Subnet_Type in ['ipv6', 'dual'] %}
+  - {{ Service_Network_ipv6 }}
+{% endif %}
+compute:
+- name: worker
+  replicas: {{ Worker_Count | default(0) }}
+controlPlane:
+  name: master
+  replicas: 3
+  platform:
+    baremetal: {}
+platform:
+  baremetal:
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+    apiVIP: {{ api_vip_ipv4 }}
+    ingressVIP: {{ ingress_vip_ipv4 }}
+{% elif IP_Subnet_Type == 'ipv6' %}
+    apiVIP: {{ api_vip_ipv6 }}
+    ingressVIP: {{ ingress_vip_ipv6 }}
+{% endif %}
+    provisioningNetwork: "Disabled"
+    bootstrapExternalStaticIP: {{ bootstrapExternalStaticIP | default(Machine_Network_Gateway_ipv4, true) }}
+    bootstrapExternalStaticGateway: {{ Machine_Network_Gateway_ipv4 }}
+    bootstrapExternalStaticDNS: {{ DNS_IP }}
+    hosts:
+{% for host in Hosts %}
+      - name: {{ host.Host_Name }}
+        role: {{ host.Role }}
+        bmc:
+          address: redfish-virtualmedia://{{ Machine_Network_Gateway_ipv4 }}:9000/redfish/v1/Systems/local/{{ host.ILO_IP }}
+          username: admin
+          password: admin
+          disableCertificateVerification: True
+        bootMACAddress: "{{ host['Singh-Interface-mac'] | default(host.bootMACAddress, true) }}"
+        bootMode: "{{ bootMode | default('UEFI', true) }}"
+        rootDeviceHints:
+          deviceName: {{ host.root_Device_Hints | default('/dev/vda', true) }}
+        networkConfig:
+          interfaces:
+          - name: {{ host.get('Single-Interface-name', Single_Interface_name | default('enp3s0', true)) }}
+            type: ethernet
+            state: up
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+            ipv4:
+              address:
+              - ip: {{ host.Machine_ipv4 }}
+                prefix-length: {{ Machine_Network_Subnet_ipv4 }}
+              enabled: true
+              dhcp: false
+{% else %}
+            ipv4:
+              enabled: false
+{% endif %}
+{% if IP_Subnet_Type in ['ipv6', 'dual'] %}
+            ipv6:
+              address:
+              - ip: {{ host.Machine_ipv6 }}
+                prefix-length: {{ Machine_Network_Subnet_ipv6 }}
+              enabled: true
+              dhcp: false
+{% else %}
+            ipv6:
+              enabled: false
+{% endif %}
+          dns-resolver:
+            config:
+              server:
+              - {{ DNS_IP }}
+          routes:
+            config:
+{% if IP_Subnet_Type in ['ipv4', 'dual'] or not IP_Subnet_Type %}
+            - destination: 0.0.0.0/0
+              next-hop-address: {{ Machine_Network_Gateway_ipv4 }}
+              next-hop-interface: {{ host.get('Single-Interface-name', Single_Interface_name | default('enp3s0', true)) }}
+{% endif %}
+{% if IP_Subnet_Type in ['ipv6', 'dual'] %}
+            - destination: ::/0
+              next-hop-address: {{ Machine_Network_Gateway_ipv6 }}
+              next-hop-interface: {{ host.get('Single-Interface-name', Single_Interface_name | default('enp3s0', true)) }}
+{% endif %}
+{% endfor %}
+pullSecret: '{{ pullsecret }}'
+sshKey: '{{ sshKey }}'
+{% if mirror_registory_url and mirror_registory_url.strip() %}
+imageContentSources:
+- mirrors:
+  - {{ mirror_registory_url }}/openshift/release
+  source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+- mirrors:
+  - {{ mirror_registory_url }}/openshift/release-images
+  source: quay.io/openshift-release-dev/ocp-release
+{% endif %}
+{% if External_Quay_Certificate and External_Quay_Certificate.strip() %}
+additionalTrustBundle: |
+{{ External_Quay_Certificate | indent(2, True) }}
+{% endif %}

@@ -1,0 +1,84 @@
+import streamlit as st
+import os
+import subprocess
+import sys
+
+# Set up the visual page configuration
+st.set_page_config(page_title="OpenShift Orchestrator", layout="centered")
+
+# --- UI: Title and Instructions ---
+st.title("🚀 OpenShift Deployment Orchestrator")
+st.markdown("""
+### How to use this tool:
+1. **Browse and Upload:** Click the box below to browse your computer and select your OpenShift Configuration Excel file.
+2. **Execute:** Once uploaded, click the **Run Pipeline** button.
+3. **Wait:** The system will automatically save your file, run `save-excel.py`, and then run `generate-configfile.py`.
+---
+""")
+
+# --- UI: The "Browse" Option ---
+uploaded_file = st.file_uploader("Select the OpenShift Configuration Excel File (.xlsx)", type=["xlsx", "xls"])
+
+if uploaded_file is not None:
+    st.info(f"File **{uploaded_file.name}** is ready to process.")
+    
+    # --- UI: The Submit Button ---
+    if st.button("▶️ Run OCP Installation Pipeline", type="primary"):
+        
+        try:
+            # STEP 1: Save the uploaded file to the script location
+            with st.spinner("Saving Excel file locally..."):
+                # Get current working directory
+                current_dir = os.getcwd()
+                target_filename = "abi-ocp-input.xlsx"
+                file_path = os.path.join(current_dir, target_filename)
+                
+                # Write the uploaded file data to the local disk
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+            st.success(f"✅ Excel File has been saved successfully")
+
+            # STEP 2: Run save-excel.py
+            with st.spinner("Executing Agent to generate input input file from provided CIQ..."):
+                if not os.path.exists("save-excel.py"):
+                    st.error("❌ Failed: `Input agent` not found was not found in this folder.")
+                    st.stop()
+                
+                # Run the script and capture any errors
+                result1 = subprocess.run([sys.executable, "save-excel.py"], capture_output=True, text=True)
+                if result1.returncode != 0:
+                    st.error(f"❌ Error in input agent not found:\n\n{result1.stderr}")
+                    st.stop()
+            st.success("✅ `input file ` has been generated successfully!")
+
+            # STEP 3: Run generate-configfile.py
+            with st.spinner("Executing agent-install-config ..."):
+                if not os.path.exists("agent-install-config.py"):
+                    st.error("❌ Failed: 'agent-install-config' was not found in this folder.")
+                    st.stop()
+                    
+                result2 = subprocess.run([sys.executable, "agent-install-config.py"], capture_output=True, text=True)
+                if result2.returncode != 0:
+                    st.error(f"❌ Error in agent-install-config:\n\n{result2.stderr}")
+                    st.stop()
+            st.success("✅ install-config.yaml has been generated successfully!")
+
+            # STEP 4: Run generate-configfile.py
+            with st.spinner("Executing agent-agent-config ..."):
+                if not os.path.exists("agent-agent-config.py"):
+                    st.error("❌ Failed: 'agent-agent-config' was not found in this folder.")
+                    st.stop()
+
+                result2 = subprocess.run([sys.executable, "agent-agent-config.py"], capture_output=True, text=True)
+                if result2.returncode != 0:
+                    st.error(f"❌ Error in agent-agent-config:\n\n{result2.stderr}")
+                    st.stop()
+            st.success("✅ agent-config.yaml has been generated successfully!")
+
+
+            # FINAL: Success Message
+            st.balloons()
+            st.success("🎉 Pipeline execution is complete! Your configuration files are ready.")
+
+        except Exception as e:
+            st.error(f"An unexpected system error occurred: {e}")

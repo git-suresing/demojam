@@ -1,0 +1,182 @@
+---
+- name: Configure Server To Create Virtual environment for OCP Deployment
+  hosts: all
+  become: yes
+  tasks:
+    - name: yum install step 1
+      ansible.builtin.shell: 'dnf -y copr enable karmab/kcli'
+
+    - name: yum install step 2
+      ansible.builtin.shell: 'dnf -y install rsync tmux podman httpd-tools runc wget nmstate containernetworking-plugins bind-utils bash-completion tree python3.9 cockpit cockpit-machines dnsmasq libvirt libvirt-daemon-driver-qemu qemu-kvm kcli bash-completion vim jq tar git ipcalc python3-pip haproxy'
+
+    - name: Enable cockpit socket 1
+      ansible.builtin.shell: 'systemctl enable --now cockpit.socket'
+
+    - name: disable firewall step 3
+      ansible.builtin.shell: 'iptables -F'
+
+    - name: Install cherrypy
+      ansible.builtin.shell: 'pip3 install cherrypy'
+
+    - name: Install setuptools
+      ansible.builtin.shell: 'pip install -U pip setuptools'
+
+    - name: Enable KShushy step 4
+      ansible.builtin.shell: 'kcli create sushy-service --port 9000'
+
+    - name: Enable KShushy step 5
+      ansible.builtin.shell: 'systemctl enable ksushy --now'
+
+    - name: Enable KShushy step 6
+      ansible.builtin.shell: 'sleep 5'
+
+    - name: Enable KShushy step 7
+      ansible.builtin.shell: 'systemctl is-active ksushy'
+
+    - name: kvm 1
+      ansible.builtin.shell: 'usermod -aG qemu,libvirt $(id -un)'
+
+    - name: kvm 3
+      ansible.builtin.shell: 'systemctl enable libvirtd --now'
+
+    - name: kvm 4
+      ansible.builtin.shell: 'sleep 10'
+
+    - name: kvm 5
+      ansible.builtin.shell: 'systemctl is-active libvirtd # should show active'
+
+    - name: kvm 6
+      ansible.builtin.shell: 'systemctl restart libvirtd'
+
+    - name: network 2
+      ansible.builtin.shell: 'kcli create pool -p /var/lib/libvirt/images default'
+
+    - name: id_ras key for virtual machine
+      ansible.builtin.copy:
+        dest: /root/.ssh/id_rsa
+        content: |
+          {{ OCP_Instalation_Input.sshKey }}
+        mode: '0600'
+
+    - name: pool secret step 1
+      ansible.builtin.shell: 'mkdir -p /root/.docker'
+
+    - name: pool secret step 2
+      ansible.builtin.copy:
+        dest: /root/.docker/config.json
+        content: |
+          {{ OCP_Instalation_Input.pullsecret }}
+        mode: '0644'
+
+    - name: Download podman webcache systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/podman-webcache.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Podman container - webcache
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/root
+          TimeoutStartSec=300
+          ExecStartPre=-/usr/bin/podman rm -f webcache
+          ExecStart=/usr/bin/podman run --name webcache --net host -v /opt/webcache/data:/usr/local/apache2/htdocs:z quay.io/alosadag/httpd:p8080 
+          ExecStop=-/usr/bin/podman rm -f webcache
+          Restart=always
+          RestartSec=30s
+          StartLimitInterval=60s
+          StartLimitBurst=99
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Create webcache data directory
+      ansible.builtin.file:
+        path: /opt/webcache/data
+        state: directory
+        mode: '0755'
+
+    - name: Reload systemd daemon after adding webcache service
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable and start podman-webcache service
+      ansible.builtin.systemd:
+        name: podman-webcache
+        enabled: true
+        state: started
+
+    - name: Create baremetal network
+      ansible.builtin.command: >
+        kcli create network -c {{ OCP_Instalation_Input.Machine_Network_ipv4 }}/{{ OCP_Instalation_Input.Machine_Network_Subnet_ipv4 }}
+        -P dhcp={{ 'true' if OCP_Instalation_Input.DHCP == '1' else 'false' }}
+        --domain {{ OCP_Instalation_Input.Base_Domain }}
+        baremetal
+
+    - name: Create ctlplane network
+      ansible.builtin.command: >
+        kcli create network -c 172.17.0.0/24
+        -P dhcp=false
+        --domain {{ OCP_Instalation_Input.Base_Domain }}
+        ctlplane
+
+    - name: Create provisioning network
+      ansible.builtin.command: >
+        kcli create network -c 10.64.32.0/24
+        -P dhcp=false
+        --domain {{ OCP_Instalation_Input.Base_Domain }}
+        provisioning
+
+    - name: dns config create dnsmasq.conf file
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/dnsmasq.conf
+        content: |
+          [main]
+          dns=dnsmasq
+          [connection]
+          ipv4.dns-priority=200
+          ipv6.dns-priority=200
+        mode: '0644'
+
+    - name: dns config create main.conf file
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/dnsmasq.d/main.conf
+        content: |
+          host-record=quay.{{ OCP_Instalation_Input.Cluster_Name }}.{{ OCP_Instalation_Input.Base_Domain }},{{ OCP_Instalation_Input.Machine_Network_Gateway_ipv4 }}
+          host-record=api-int.{{ OCP_Instalation_Input.Cluster_Name }}.{{ OCP_Instalation_Input.Base_Domain }},{{ OCP_Instalation_Input.api_vip_ipv4 }}
+          host-record=api.{{ OCP_Instalation_Input.Cluster_Name }}.{{ OCP_Instalation_Input.Base_Domain }},{{ OCP_Instalation_Input.api_vip_ipv4 }}
+{% for host in OCP_Instalation_Input.Hosts %}
+          host-record={{ host.Host_Name | lower }},{{ host.Machine_ipv4 }}
+{% endfor %}
+          address=/apps.{{ OCP_Instalation_Input.Cluster_Name }}.{{ OCP_Instalation_Input.Base_Domain }}/{{ OCP_Instalation_Input.ingress_vip_ipv4 }}
+        mode: '0644'
+
+    - name: dns config reload NetworkManager.service
+      ansible.builtin.shell: 'systemctl reload NetworkManager.service'
+
+    - name: dns config restart NetworkManager.service
+      ansible.builtin.shell: 'systemctl restart NetworkManager.service'
+
+    - name: dns config acive NetworkManager
+      ansible.builtin.shell: 'systemctl is-active NetworkManager'
+
+{% for host in OCP_Instalation_Input.Hosts %}
+    - name: Create {{ host.ILO_IP }} VM
+      ansible.builtin.command: >
+        kcli create vm
+        -P start=False
+        -P uefi_legacy=true
+        -P plan=ocp
+        -P memory=20000
+        -P numcpus=16
+        -P disks=[200,700]
+        -P nets='[{"name": "baremetal", "mac": "{{ host["Singh-Interface-mac"] }}"},
+                  {"name": "provisioning", "mac": "aa:aa:aa:aa:02:0{{ loop.index }}"},
+                  {"name": "ctlplane", "mac": "aa:aa:aa:aa:03:0{{ loop.index }}"}]'
+        -P uuid=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa010{{ loop.index }}
+        {{ host.ILO_IP }}
+{% endfor %}

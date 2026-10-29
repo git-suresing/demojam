@@ -1,0 +1,70 @@
+apiVersion: v1
+baseDomain: {{ OCP_Instalation_Input.Base_Domain }}
+compute:
+- name: worker
+  hyperthreading: Enabled
+  architecture: amd64
+  replicas: {{ '0' if OCP_Instalation_Input.Worker_Count == 'False' else OCP_Instalation_Input.Worker_Count }}
+controlPlane:
+  hyperthreading: Enabled
+  architecture: amd64
+  name: master
+  replicas: 3
+metadata:
+  name: {{ OCP_Instalation_Input.Cluster_Name }}
+networking:
+  machineNetwork:
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv4', 'dual'] %}
+    - cidr: {{ OCP_Instalation_Input.Machine_Network_ipv4 }}/{{ OCP_Instalation_Input.Machine_Network_Subnet_ipv4 }}
+{%- endif %}
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv6', 'dual'] %}
+    - cidr: {{ OCP_Instalation_Input.Machine_Network_ipv6 }}/{{ OCP_Instalation_Input.Machine_Network_Subnet_ipv6 }}
+{%- endif %}
+  clusterNetwork:
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv4', 'dual'] %}
+    - cidr: {{ OCP_Instalation_Input.Cluster_Network_ipv4 }}
+      hostPrefix: 23
+{%- endif %}
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv6', 'dual'] %}
+    - cidr: {{ OCP_Instalation_Input.Cluster_Network_ipv6 }}
+      hostPrefix: 64
+{%- endif %}
+  serviceNetwork:
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv4', 'dual'] %}
+    - {{ OCP_Instalation_Input.Service_Network_ipv4 }}
+{%- endif %}
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv6', 'dual'] %}
+    - {{ OCP_Instalation_Input.Service_Network_ipv6 }}
+{%- endif %}
+  networkType: OVNKubernetes
+platform:
+  baremetal:
+    apiVIPs:
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv4', 'dual'] %}
+    - {{ OCP_Instalation_Input.api_vip_ipv4 }}
+{%- endif %}
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv6', 'dual'] %}
+    - {{ OCP_Instalation_Input.api_vip_ipv6 }}
+{%- endif %}
+    ingressVIPs:
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv4', 'dual'] %}
+    - {{ OCP_Instalation_Input.ingress_vip_ipv4 }}
+{%- endif %}
+{%- if OCP_Instalation_Input.IP_Subnet_Type in ['ipv6', 'dual'] %}
+    - {{ OCP_Instalation_Input.ingress_vip_ipv6 }}
+{%- endif %}
+pullSecret: '{{ OCP_Instalation_Input.pullsecret }}'
+sshKey: '{{ OCP_Instalation_Input.sshKey }}'
+{%- if OCP_Instalation_Input.mirror_registory_url %}
+imageContentSources:
+- mirrors:
+  - {{ OCP_Instalation_Input.mirror_registory_url }}/openshift/release
+  source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+- mirrors:
+  - {{ OCP_Instalation_Input.mirror_registory_url }}/openshift/release-images
+  source: quay.io/openshift-release-dev/ocp-release
+{%- endif %}
+{%- if OCP_Instalation_Input.External_Quay_Certificate %}
+additionalTrustBundle: |
+{{ OCP_Instalation_Input.External_Quay_Certificate | indent(4, true) }}
+{%- endif %}

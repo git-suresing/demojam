@@ -1,0 +1,94 @@
+---
+- name: Deploying OCP Cluster using ABI method
+  hosts: all
+  become: true
+  vars:
+    gateway_ip: "{{ OCP_Instalation_Input.Machine_Network_Gateway_ipv4 }}"
+    hosts_list: "{{ OCP_Instalation_Input.Hosts }}"
+
+  tasks:
+    - name: Create abi directory in home
+      ansible.builtin.file:
+        path: "/root/abi"
+        state: directory
+        mode: '0755'
+
+    - name: Copy install-config from source to bastion node
+      ansible.builtin.copy:
+        src: "install-config.yaml"
+        dest: "/root/abi/install-config.yaml"
+        mode: '0644'
+
+    - name: Copy agent-config from source to bastion node
+      ansible.builtin.copy:
+        src: "agent-config.yaml"
+        dest: "/root/abi/agent-config.yaml"
+        mode: '0644'
+
+    - name: Run openshift-install to create agent image
+      ansible.builtin.command:
+        cmd: openshift-install agent create image --dir=/root/abi/ --log-level=debug
+
+    - name: Copy generated ISO to webcache directory
+      ansible.builtin.copy:
+        src: "/root/abi/agent.x86_64.iso"
+        dest: "/opt/webcache/data/agent.x86_64.iso"
+        mode: '0644'
+        remote_src: true
+
+{% for host in OCP_Instalation_Input.Hosts %}
+{% if host.Role == 'master' %}
+    - name: Insert Virtual Media on {{ host.ILO_IP }}
+      ansible.builtin.uri:
+        url: "https://{{ OCP_Instalation_Input.Machine_Network_Gateway_ipv4 }}:9000/redfish/v1/Managers/local/{{ host.ILO_IP }}/VirtualMedia/Cd/Actions/VirtualMedia.InsertMedia"
+        method: POST
+        body_format: json
+        body:
+          Image: "http://{{ OCP_Instalation_Input.Machine_Network_Gateway_ipv4 }}:8080/agent.x86_64.iso"
+          Inserted: true
+        headers:
+          Content-Type: "application/json"
+        validate_certs: false
+        status_code: [200, 202, 204]
+      register: result_{{ host.ILO_IP | replace('-', '_') }}
+
+    - name: Show result for {{ host.ILO_IP }}
+      ansible.builtin.debug:
+        var: result_{{ host.ILO_IP | replace('-', '_') }}
+{% endif %}
+{% endfor %}
+
+    - name: Start hub VM
+      ansible.builtin.command:
+        cmd: kcli start plan ocp
+
+    - name: Create /root/.kube directory
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy kubeconfig file to /root/.kube/config
+      ansible.builtin.copy:
+        src: /root/abi/auth/kubeconfig
+        dest: /root/.kube/config
+        remote_src: true
+        mode: '0600'
+
+    - name: Generate oc bash completion script
+      ansible.builtin.command:
+        cmd: oc completion bash
+      register: oc_completion
+      failed_when: false
+      changed_when: false
+
+{% raw %}
+    - name: Save oc bash completion to file
+      ansible.builtin.copy:
+        dest: /etc/bash_completion.d/oc
+        content: "{{ oc_completion.stdout | default('') }}"
+        owner: root
+        group: root
+        mode: '0644'
+      when: oc_completion is defined and oc_completion.stdout is defined and oc_completion.stdout != ''
+{% endraw %}

@@ -1,0 +1,172 @@
+apiVersion: v1alpha1
+kind: AgentConfig
+metadata:
+  name: {{ data.Cluster_Name }}
+{% set stack = data.IP_Subnet_Type | lower %}
+{% set enable_ipv4 = stack in ['ipv4', 'dual'] %}
+{% set enable_ipv6 = stack in ['ipv6', 'dual'] %}
+{% set r_ip = data.Hosts[0].Machine_ipv4 if enable_ipv4 else data.Hosts[0].Machine_ipv6 %}
+rendezvousIP: {{ r_ip }}
+{% if data.NTP_IP %}
+additionalNTPSources:
+{% for ntp in data.NTP_IP.split() %}
+  - {{ ntp }}
+{% endfor %}
+{% endif %}
+hosts:
+{% for host in data.Hosts %}
+{% set is_bond = data.Bond_Name | length > 0 %}
+{% set base_iface = data.Bond_Name if is_bond else data['Single-Interface-name'] %}
+{% set has_vlan = data.Machine_Network_Vlan | length > 0 %}
+{% set active_iface = base_iface ~ '.' ~ data.Machine_Network_Vlan if has_vlan else base_iface %}
+  - hostname: {{ host.Host_Name }}
+    role: {{ host.Role }}
+{% if host.root_Device_Hints %}
+    rootDeviceHints:
+      {{ host.root_Device_Hints }}
+{% endif %}
+    interfaces:
+{% if is_bond %}
+      - name: {{ data['Bond_Interface-1_Name'] }}
+        macAddress: {{ host['Bond-Interface1-mac'] }}
+      - name: {{ data['Bond_Interface-2_Name'] }}
+        macAddress: {{ host['Bond-Interface2-mac'] }}
+{% else %}
+      - name: {{ data['Single-Interface-name'] }}
+        macAddress: {{ host['Singh-Interface-mac'] }}
+{% endif %}
+    networkConfig:
+      interfaces:
+{% if has_vlan %}
+        - name: {{ active_iface }}
+          type: vlan
+          state: up
+          mtu: {{ data.MTU }}
+          vlan:
+            base-iface: {{ base_iface }}
+            id: {{ data.Machine_Network_Vlan }}
+{% if enable_ipv4 %}
+          ipv4:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv4 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv4 }}
+            dhcp: false
+{% else %}
+          ipv4:
+            enabled: false
+{% endif %}
+{% if enable_ipv6 %}
+          ipv6:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv6 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv6 }}
+            dhcp: false
+{% else %}
+          ipv6:
+            enabled: false
+{% endif %}
+{% endif %}
+{% if is_bond %}
+        - name: {{ base_iface }}
+          type: bond
+          state: up
+          mtu: {{ data.MTU }}
+{% if has_vlan %}
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+{% else %}
+{% if enable_ipv4 %}
+          ipv4:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv4 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv4 }}
+            dhcp: false
+{% else %}
+          ipv4:
+            enabled: false
+{% endif %}
+{% if enable_ipv6 %}
+          ipv6:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv6 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv6 }}
+            dhcp: false
+{% else %}
+          ipv6:
+            enabled: false
+{% endif %}
+{% endif %}
+          link-aggregation:
+{% if data.Bond_Type == "Active-Passive" %}
+            mode: active-backup
+            options:
+              miimon: "100"
+{% else %}
+            mode: 802.3ad
+            options:
+              miimon: 100
+              lacp_rate: {{ data.lacp_rate }}
+{% endif %}
+            port:
+             - {{ data['Bond_Interface-1_Name'] }}
+             - {{ data['Bond_Interface-2_Name'] }}
+{% else %}
+        - name: {{ base_iface }}
+          type: ethernet
+          state: up
+          mtu: {{ data.MTU }}
+{% if has_vlan %}
+          ipv4:
+            enabled: false
+          ipv6:
+            enabled: false
+{% else %}
+{% if enable_ipv4 %}
+          ipv4:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv4 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv4 }}
+            dhcp: false
+{% else %}
+          ipv4:
+            enabled: false
+{% endif %}
+{% if enable_ipv6 %}
+          ipv6:
+            enabled: true
+            address:
+            - ip: {{ host.Machine_ipv6 }}
+              prefix-length: {{ data.Machine_Network_Subnet_ipv6 }}
+            dhcp: false
+{% else %}
+          ipv6:
+            enabled: false
+{% endif %}
+{% endif %}
+{% endif %}
+      dns-resolver:
+        config:
+          server:
+{% for dns in data.DNS_IP.split() %}
+          - {{ dns }}
+{% endfor %}
+      routes:
+        config:
+{% if enable_ipv4 %}
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ data.Machine_Network_Gateway_ipv4 }}
+          next-hop-interface: {{ active_iface }}
+{% endif %}
+{% if enable_ipv6 %}
+        - destination: ::/0
+          next-hop-address: {{ data.Machine_Network_Gateway_ipv6 }}
+          next-hop-interface: {{ active_iface }}
+{% endif %}
+{% endfor %}
