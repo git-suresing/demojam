@@ -10,10 +10,10 @@ Order the LAB from link [here](https://catalog.demo.redhat.com/catalog/all?searc
 ## Select the field as given
  ![image](images/lab-select.png)
 
-Download the Code from the given link
+Download the Code
 
 ```
-
+git clone https://github.com/git-suresing/demojam
 ```
 # Configure local server to run OCP AI-Chatbot
 install the below software on you local fedor or windows wsl
