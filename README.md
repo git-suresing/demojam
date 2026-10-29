@@ -2,9 +2,9 @@
 
 This Document will Help user to test oenshift chatbot AI on demoradhat lab.
 
-# Order the given lab from demo.redhat.com
+# Order the lab from demo.redhat.com
 
-Order the LAB from [here](https://catalog.demo.redhat.com/catalog/all?search=baremetal&item=babylon-catalog-prod%2Fopenshift-cnv.cnv-blank.prod).
+Order the LAB from link [here](https://catalog.demo.redhat.com/catalog/all?search=baremetal&item=babylon-catalog-prod%2Fopenshift-cnv.cnv-blank.prod).
 
 
 ## Select the field as given
@@ -17,7 +17,7 @@ Download the Code from the given link
 ```
 # Configure local server to run OCP AI-Chatbot
 install the below software on you local fedor or windows wsl
-## Install Puthon utility
+## Install Python utility
 ```
 pip install openpyxl --break-system-packages
 pip install streamlit --break-system-packages
